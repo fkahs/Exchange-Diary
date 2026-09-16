@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우리의 교환일기</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📖 우리의 교환일기</h1>
+
+        <section id="login-panel" class="panel">
+            <h2>로그인</h2>
+            <input type="text" id="login-username" placeholder="아이디">
+            <input type="password" id="login-password" placeholder="비밀번호">
+            <label class="remember-login">
+                <input type="checkbox" id="remember-login" checked>
+                로그인 유지
+            </label>
+            <button type="button" onclick="login()">로그인</button>
+            <p class="helper-text">개발자만 사용자 계정을 추가할 수 있습니다.</p>
+        </section>
+
+        <section id="developer-panel" class="panel hidden">
+            <h2>개발자 계정 관리</h2>
+            <input type="text" id="new-user-id" placeholder="추가할 아이디">
+            <input type="password" id="new-user-password" placeholder="추가할 비밀번호">
+            <button type="button" class="secondary-btn" onclick="addUserAccount()">사용자 추가</button>
+            <button type="button" class="secondary-btn" onclick="openAdminPage()">관리자 페이지</button>
+            <button type="button" class="danger-btn" onclick="logout()">로그아웃</button>
+        </section>
+
+        <section id="inquiry-panel" class="panel hidden inquiry-collapsed">
+            <div class="inquiry-header">
+                <h2>문의하기</h2>
+                <button type="button" class="secondary-btn" onclick="toggleInquiryPanel()">열기</button>
+            </div>
+            <div class="inquiry-body hidden">
+                <input type="text" id="inquiry-title" placeholder="문의 제목">
+                <textarea id="inquiry-content" placeholder="문의 내용을 입력해 주세요."></textarea>
+                <button type="button" onclick="sendInquiry()">문의 보내기</button>
+                <div id="inquiry-list" class="inquiry-list"></div>
+            </div>
+        </section>
+
+        <section id="admin-page" class="panel hidden">
+            <div class="admin-header">
+                <h2>개발자 관리자 페이지</h2>
+                <button type="button" class="secondary-btn" onclick="closeAdminPage()">닫기</button>
+            </div>
+
+            <div class="admin-section">
+                <h3>사용자 목록</h3>
+                <ul id="admin-user-list" class="admin-list"></ul>
+            </div>
+
+            <div class="admin-section">
+                <h3>전체 일기</h3>
+                <div id="admin-diary-list"></div>
+            </div>
+        </section>
+
+        <section id="diary-panel" class="panel hidden">
+            <h2>일기 쓰기</h2>
+            <div class="logged-user-box">
+                <span id="logged-user-label">로그인 사용자</span>
+            </div>
+            <input type="text" id="writer" placeholder="작성자 이름">
+            <input type="text" id="title" placeholder="일기 제목">
+            <textarea id="content" placeholder="오늘 어떤 일이 있었나요?"></textarea>
+            <input type="file" id="image" accept="image/*">
+            <div id="image-preview"></div>
+            <button type="button" id="remove-image-btn" class="danger-btn hidden" onclick="removeSelectedImage()">사진 삭제</button>
+            <div class="action-row">
+                <button type="button" id="save-diary-btn" onclick="saveDiary()">일기 저장하기</button>
+                <button type="button" class="secondary-btn" id="cancel-edit-btn" onclick="resetForm()">취소</button>
+                <button type="button" class="danger-btn" onclick="logout()">로그아웃</button>
+            </div>
+        </section>
+
+        <section class="list-section">
+            <h2>일기 목록</h2>
+            <div id="diary-list"></div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
