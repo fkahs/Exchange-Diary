@@ -40,6 +40,41 @@ function ensureDeveloperAccount() {
     }
 }
 
+function updateBottomNav(activeKey = 'diary') {
+    const bottomNav = document.getElementById('bottom-nav');
+    if (!bottomNav) return;
+
+    if (!loggedInUser) {
+        bottomNav.classList.add('hidden');
+        return;
+    }
+
+    bottomNav.classList.remove('hidden');
+
+    const navButtons = bottomNav.querySelectorAll('.nav-btn');
+    navButtons.forEach((button) => {
+        const isActive = button.dataset.nav === activeKey;
+        button.classList.toggle('is-active', isActive);
+    });
+
+    if (loggedInUser !== DEVELOPER_ACCOUNT.username) {
+        const adminButton = Array.from(navButtons).find((button) => button.dataset.nav === 'admin');
+        if (adminButton) {
+            adminButton.disabled = true;
+            adminButton.title = '개발자 전용';
+            adminButton.style.opacity = '0.55';
+        }
+    } else {
+        navButtons.forEach((button) => {
+            if (button.dataset.nav === 'admin') {
+                button.disabled = false;
+                button.title = '';
+                button.style.opacity = '1';
+            }
+        });
+    }
+}
+
 function updateLoginUI() {
     const loginPanel = document.getElementById('login-panel');
     const developerPanel = document.getElementById('developer-panel');
@@ -59,6 +94,7 @@ function updateLoginUI() {
         diaryPanel.classList.add('hidden');
         inquiryPanel.classList.add('hidden');
         writerInput.value = '';
+        updateBottomNav();
         return;
     }
 
@@ -74,6 +110,8 @@ function updateLoginUI() {
     } else {
         developerPanel.classList.add('hidden');
     }
+
+    updateBottomNav('diary');
 }
 
 function login() {
@@ -382,6 +420,56 @@ function toggleInquiryPanel() {
     toggleButton.textContent = isHidden ? '접기' : '열기';
 }
 
+function handleBottomNavClick(event) {
+    const button = event.target.closest('.nav-btn');
+    if (!button) return;
+
+    const navKey = button.dataset.nav;
+
+    if (navKey === 'logout') {
+        logout();
+        return;
+    }
+
+    if (navKey === 'diary') {
+        document.getElementById('diary-panel').classList.remove('hidden');
+        document.getElementById('inquiry-panel').classList.add('hidden');
+        document.getElementById('admin-page').classList.add('hidden');
+        updateBottomNav('diary');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
+    if (navKey === 'inquiry') {
+        document.getElementById('inquiry-panel').classList.remove('hidden');
+        const inquiryBody = document.querySelector('#inquiry-panel .inquiry-body');
+        const toggleButton = document.querySelector('#inquiry-panel .inquiry-header button');
+
+        if (inquiryBody.classList.contains('hidden')) {
+            inquiryBody.classList.remove('hidden');
+            toggleButton.textContent = '접기';
+        }
+
+        updateBottomNav('inquiry');
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        return;
+    }
+
+    if (navKey === 'admin') {
+        if (loggedInUser !== DEVELOPER_ACCOUNT.username) {
+            alert('개발자만 관리자 페이지에 접근할 수 있습니다.');
+            return;
+        }
+
+        document.getElementById('admin-page').classList.remove('hidden');
+        document.getElementById('diary-panel').classList.add('hidden');
+        document.getElementById('inquiry-panel').classList.add('hidden');
+        updateBottomNav('admin');
+        openAdminPage();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
 function sendInquiry() {
     if (!loggedInUser) {
         alert('로그인 후 문의를 보낼 수 있습니다.');
@@ -632,6 +720,7 @@ window.onload = function () {
     renderAdminDiaries();
     document.getElementById('image').addEventListener('change', handleImageSelect);
     document.getElementById('diary-list').addEventListener('click', handleDiaryAction);
+    document.getElementById('bottom-nav').addEventListener('click', handleBottomNavClick);
     if (!loggedInUser) {
         document.getElementById('writer').value = '';
     }
