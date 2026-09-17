@@ -1116,6 +1116,14 @@ window.onload = async function () {
     document.getElementById('image').addEventListener('change', handleImageSelect);
     document.getElementById('diary-list').addEventListener('click', handleDiaryAction);
     document.getElementById('bottom-nav').addEventListener('click', handleBottomNavClick);
+    document.querySelectorAll('#login-username, #login-password').forEach((input) => {
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                login();
+            }
+        });
+    });
     subscribeToRemoteChanges();
     if (!loggedInUser) {
         document.getElementById('writer').value = '';
