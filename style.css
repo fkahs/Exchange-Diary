@@ -171,6 +171,10 @@ textarea {
     z-index: 20;
 }
 
+.bottom-nav.hidden {
+    display: none;
+}
+
 .nav-btn {
     min-height: 46px;
     padding: 10px 8px;

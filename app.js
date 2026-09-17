@@ -1,7 +1,8 @@
 const DEVELOPER_ACCOUNT = {
-    username: 'alswl100409',
+    username: 'lamon',
     password: 'fkahs100409@'
 };
+const LEGACY_DEVELOPER_USERNAME = 'alswl100409';
 
 const LOGIN_KEY = 'diary_logged_in_user';
 const REMEMBER_LOGIN_KEY = 'diary_remember_login';
@@ -34,9 +35,17 @@ function saveUsers(users) {
 
 function ensureDeveloperAccount() {
     const users = getUsers();
+    if (users[LEGACY_DEVELOPER_USERNAME] && !users[DEVELOPER_ACCOUNT.username]) {
+        users[DEVELOPER_ACCOUNT.username] = users[LEGACY_DEVELOPER_USERNAME];
+        delete users[LEGACY_DEVELOPER_USERNAME];
+    }
     if (!users[DEVELOPER_ACCOUNT.username]) {
         users[DEVELOPER_ACCOUNT.username] = DEVELOPER_ACCOUNT.password;
-        saveUsers(users);
+    }
+    saveUsers(users);
+
+    if (localStorage.getItem(LOGIN_KEY) === LEGACY_DEVELOPER_USERNAME) {
+        localStorage.setItem(LOGIN_KEY, DEVELOPER_ACCOUNT.username);
     }
 }
 
@@ -170,6 +179,7 @@ function openAdminPage() {
     document.getElementById('admin-page').classList.remove('hidden');
     renderAdminUsers();
     renderAdminDiaries();
+    renderAdminInquiries();
 }
 
 function closeAdminPage() {
@@ -311,7 +321,7 @@ function saveDiary() {
             title: title,
             content: content,
             image: selectedImage,
-            date: new Date().toLocaleDateString('ko-KR')
+            date: new Date().toLocaleString('ko-KR')
         };
         diaries.unshift(diary);
         markWrittenToday(writer);
@@ -497,31 +507,29 @@ function sendInquiry() {
     document.getElementById('inquiry-title').value = '';
     document.getElementById('inquiry-content').value = '';
     renderInquiries();
+    renderAdminInquiries();
 }
 
 function renderInquiries() {
     const inquiryList = document.getElementById('inquiry-list');
     if (!inquiryList) return;
 
-    const inquiries = JSON.parse(localStorage.getItem(INQUIRIES_KEY) || '[]');
     inquiryList.innerHTML = '';
+    inquiryList.innerHTML = '<p class="helper-text">문의가 관리자에게 전달되었습니다.</p>';
+}
 
-    if (inquiries.length === 0) {
-        inquiryList.innerHTML = '<p class="no-data">등록된 문의가 없습니다.</p>';
+function deleteInquiry(inquiryId) {
+    if (loggedInUser !== DEVELOPER_ACCOUNT.username) {
+        alert('개발자만 문의를 삭제할 수 있습니다.');
         return;
     }
 
-    inquiries.forEach((item) => {
-        const row = document.createElement('div');
-        row.className = 'inquiry-item';
-        row.innerHTML = `
-            <strong>${item.title}</strong>
-            <div>작성자: ${item.user}</div>
-            <div>시간: ${item.date}</div>
-            <p>${item.content}</p>
-        `;
-        inquiryList.appendChild(row);
-    });
+    const confirmed = confirm('이 문의를 삭제할까요?');
+    if (!confirmed) return;
+
+    const inquiries = JSON.parse(localStorage.getItem(INQUIRIES_KEY) || '[]');
+    localStorage.setItem(INQUIRIES_KEY, JSON.stringify(inquiries.filter((item) => item.id !== inquiryId)));
+    renderAdminInquiries();
 }
 
 function deleteUserAccount(usernameToDelete) {
@@ -615,7 +623,7 @@ function renderAdminDiaries() {
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `작성자: ${diary.writer} | 날짜: ${diary.date}`;
+        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diary.date}`;
 
         const content = document.createElement('p');
         content.textContent = diary.content;
@@ -632,6 +640,38 @@ function renderAdminDiaries() {
 
         card.appendChild(content);
         adminDiaryList.appendChild(card);
+    });
+}
+
+function renderAdminInquiries() {
+    const inquiryList = document.getElementById('admin-inquiry-list');
+    if (!inquiryList || loggedInUser !== DEVELOPER_ACCOUNT.username) return;
+
+    const inquiries = JSON.parse(localStorage.getItem(INQUIRIES_KEY) || '[]');
+    inquiryList.innerHTML = '';
+
+    if (inquiries.length === 0) {
+        inquiryList.innerHTML = '<p class="no-data">등록된 문의가 없습니다.</p>';
+        return;
+    }
+
+    inquiries.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'inquiry-item';
+        row.innerHTML = `
+            <strong>${item.title}</strong>
+            <div>작성자: ${item.user}</div>
+            <div>문의 시간: ${item.date}</div>
+            <p>${item.content}</p>
+        `;
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'danger-btn';
+        deleteButton.textContent = '문의 삭제';
+        deleteButton.addEventListener('click', () => deleteInquiry(item.id));
+        row.appendChild(deleteButton);
+        inquiryList.appendChild(row);
     });
 }
 
@@ -656,7 +696,7 @@ function renderDiaries() {
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `작성자: ${diary.writer} | 날짜: ${diary.date}`;
+        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diary.date}`;
 
         const content = document.createElement('p');
         content.textContent = diary.content;
@@ -718,6 +758,7 @@ window.onload = function () {
     renderInquiries();
     renderAdminUsers();
     renderAdminDiaries();
+    renderAdminInquiries();
     document.getElementById('image').addEventListener('change', handleImageSelect);
     document.getElementById('diary-list').addEventListener('click', handleDiaryAction);
     document.getElementById('bottom-nav').addEventListener('click', handleBottomNavClick);
