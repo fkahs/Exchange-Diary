@@ -18,7 +18,10 @@ let rememberLogin = localStorage.getItem(REMEMBER_LOGIN_KEY) !== 'false';
 let currentAuthUser = null;
 
 function isRemoteMode() {
-    return SUPABASE_CONFIGURED && diarySupabase;
+    return typeof SUPABASE_CONFIGURED !== 'undefined'
+        && SUPABASE_CONFIGURED
+        && typeof diarySupabase !== 'undefined'
+        && diarySupabase !== null;
 }
 
 function usernameToEmail(username) {
