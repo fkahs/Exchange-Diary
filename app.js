@@ -169,7 +169,13 @@ async function login() {
         });
 
         if (error || !data.user) {
-            alert('아이디 또는 비밀번호가 올바르지 않습니다.');
+            if (error?.message?.toLowerCase().includes('email not confirmed')) {
+                alert('Supabase에서 lamon 계정의 이메일 확인을 완료하거나 Email Confirm을 꺼 주세요.');
+            } else if (error?.message?.toLowerCase().includes('invalid login credentials')) {
+                alert('Supabase Authentication에 lamon 계정을 만들고 비밀번호를 fkahs100409@로 설정해 주세요.');
+            } else {
+                alert(`Supabase 로그인 실패: ${error?.message || '계정을 확인해 주세요.'}`);
+            }
             return;
         }
 
