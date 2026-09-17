@@ -2,7 +2,7 @@ const DEVELOPER_ACCOUNT = {
     username: 'lamon',
     password: 'fkahs100409@'
 };
-const LEGACY_DEVELOPER_USERNAME = 'alswl100409';
+const LEGACY_DEVELOPER_USERNAMES = ['민지100409', 'ㅣ므ㅐㅜ', 'alswl100409'];
 
 const LOGIN_KEY = 'diary_logged_in_user';
 const REMEMBER_LOGIN_KEY = 'diary_remember_login';
@@ -15,6 +15,37 @@ let selectedImage = '';
 let editingDiaryId = null;
 let loggedInUser = localStorage.getItem(LOGIN_KEY) || '';
 let rememberLogin = localStorage.getItem(REMEMBER_LOGIN_KEY) !== 'false';
+let currentAuthUser = null;
+
+function isRemoteMode() {
+    return SUPABASE_CONFIGURED && diarySupabase;
+}
+
+function usernameToEmail(username) {
+    return `${encodeURIComponent(username.trim()).replace(/%/g, '_')}@exchange-diary.local`;
+}
+
+async function loadRemoteProfile(user) {
+    const { data: profile, error } = await diarySupabase
+        .from('profiles')
+        .select('username, is_admin')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (error) throw error;
+    if (!profile) {
+        const username = user.user_metadata?.username || '';
+        const { data: createdProfile, error: createError } = await diarySupabase
+            .from('profiles')
+            .insert({ id: user.id, username: username, is_admin: false })
+            .select('username, is_admin')
+            .single();
+        if (createError) throw createError;
+        return createdProfile;
+    }
+
+    return profile;
+}
 
 function getTodayKey() {
     const today = new Date();
@@ -35,16 +66,11 @@ function saveUsers(users) {
 
 function ensureDeveloperAccount() {
     const users = getUsers();
-    if (users[LEGACY_DEVELOPER_USERNAME] && !users[DEVELOPER_ACCOUNT.username]) {
-        users[DEVELOPER_ACCOUNT.username] = users[LEGACY_DEVELOPER_USERNAME];
-        delete users[LEGACY_DEVELOPER_USERNAME];
-    }
-    if (!users[DEVELOPER_ACCOUNT.username]) {
-        users[DEVELOPER_ACCOUNT.username] = DEVELOPER_ACCOUNT.password;
-    }
+    LEGACY_DEVELOPER_USERNAMES.forEach((username) => delete users[username]);
+    users[DEVELOPER_ACCOUNT.username] = DEVELOPER_ACCOUNT.password;
     saveUsers(users);
 
-    if (localStorage.getItem(LOGIN_KEY) === LEGACY_DEVELOPER_USERNAME) {
+    if (LEGACY_DEVELOPER_USERNAMES.includes(localStorage.getItem(LOGIN_KEY))) {
         localStorage.setItem(LOGIN_KEY, DEVELOPER_ACCOUNT.username);
     }
 }
@@ -123,10 +149,9 @@ function updateLoginUI() {
     updateBottomNav('diary');
 }
 
-function login() {
+async function login() {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    const users = getUsers();
     const rememberInput = document.getElementById('remember-login');
 
     if (!username || !password) {
@@ -134,30 +159,57 @@ function login() {
         return;
     }
 
-    if (users[username] && users[username] === password) {
-        loggedInUser = username;
-        rememberLogin = !!rememberInput.checked;
-        localStorage.setItem(REMEMBER_LOGIN_KEY, String(rememberLogin));
+    if (isRemoteMode()) {
+        const { data, error } = await diarySupabase.auth.signInWithPassword({
+            email: usernameToEmail(username),
+            password: password
+        });
 
-        if (rememberLogin) {
-            localStorage.setItem(LOGIN_KEY, username);
-        } else {
-            localStorage.removeItem(LOGIN_KEY);
+        if (error || !data.user) {
+            alert('아이디 또는 비밀번호가 올바르지 않습니다.');
+            return;
         }
 
-        document.getElementById('login-password').value = '';
-        updateLoginUI();
-        renderDiaries();
-        return;
+        try {
+            const profile = await loadRemoteProfile(data.user);
+            currentAuthUser = data.user;
+            loggedInUser = profile.username;
+        } catch (profileError) {
+            alert(`프로필을 불러오지 못했습니다: ${profileError.message}`);
+            return;
+        }
+    } else {
+        const users = getUsers();
+        if (!users[username] || users[username] !== password) {
+            alert('아이디 또는 비밀번호가 올바르지 않습니다.');
+            return;
+        }
+        loggedInUser = username;
     }
 
-    alert('아이디 또는 비밀번호가 올바르지 않습니다.');
+    rememberLogin = !!rememberInput.checked;
+    localStorage.setItem(REMEMBER_LOGIN_KEY, String(rememberLogin));
+
+    if (rememberLogin) {
+        localStorage.setItem(LOGIN_KEY, loggedInUser);
+    } else {
+        localStorage.removeItem(LOGIN_KEY);
+    }
+
+    document.getElementById('login-password').value = '';
+    updateLoginUI();
+    renderDiaries();
 }
 
-function logout() {
+async function logout() {
     const confirmed = confirm('로그아웃하시겠습니까?');
     if (!confirmed) {
         return;
+    }
+
+    if (isRemoteMode()) {
+        await diarySupabase.auth.signOut();
+        currentAuthUser = null;
     }
 
     loggedInUser = '';
@@ -186,7 +238,7 @@ function closeAdminPage() {
     document.getElementById('admin-page').classList.add('hidden');
 }
 
-function addUserAccount() {
+async function addUserAccount() {
     if (loggedInUser !== DEVELOPER_ACCOUNT.username) {
         alert('개발자만 사용자 계정을 추가할 수 있습니다.');
         return;
@@ -197,6 +249,40 @@ function addUserAccount() {
 
     if (!newUserId || !newUserPassword) {
         alert('추가할 아이디와 비밀번호를 입력해 주세요.');
+        return;
+    }
+
+    if (isRemoteMode()) {
+        const { data, error } = await diarySupabase.auth.signUp({
+            email: usernameToEmail(newUserId),
+            password: newUserPassword,
+            options: { data: { username: newUserId } }
+        });
+
+        if (error || !data.user || !data.session) {
+            alert(error?.message || 'Supabase에서 이메일 확인을 끄고 다시 시도해 주세요.');
+            return;
+        }
+
+        const { error: profileError } = await diarySupabase.from('profiles').insert({
+            id: data.user.id,
+            username: newUserId,
+            is_admin: false
+        });
+        await diarySupabase.auth.signInWithPassword({
+            email: usernameToEmail(DEVELOPER_ACCOUNT.username),
+            password: DEVELOPER_ACCOUNT.password
+        });
+
+        if (profileError) {
+            alert(`사용자 프로필을 만들지 못했습니다: ${profileError.message}`);
+            return;
+        }
+
+        document.getElementById('new-user-id').value = '';
+        document.getElementById('new-user-password').value = '';
+        alert('사용자 계정이 추가되었습니다.');
+        renderAdminUsers();
         return;
     }
 
@@ -297,6 +383,11 @@ function saveDiary() {
         return;
     }
 
+    if (isRemoteMode()) {
+        saveRemoteDiary(title, content);
+        return;
+    }
+
     const diaries = JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
 
     if (!editingDiaryId && hasWrittenToday(writer)) {
@@ -332,7 +423,35 @@ function saveDiary() {
     renderDiaries();
 }
 
+async function saveRemoteDiary(title, content) {
+    const diaryData = {
+        writer_id: currentAuthUser.id,
+        writer: loggedInUser,
+        title: title,
+        content: content,
+        image: selectedImage || ''
+    };
+
+    const query = editingDiaryId
+        ? diarySupabase.from('diaries').update(diaryData).eq('id', editingDiaryId).eq('writer_id', currentAuthUser.id)
+        : diarySupabase.from('diaries').insert(diaryData);
+    const { error } = await query;
+
+    if (error) {
+        alert(`일기를 저장하지 못했습니다: ${error.message}`);
+        return;
+    }
+
+    resetForm();
+    renderDiaries();
+}
+
 function deleteDiary(diaryId) {
+    if (isRemoteMode()) {
+        deleteRemoteDiary(diaryId);
+        return;
+    }
+
     const diaries = JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
     const diaryToDelete = diaries.find((diary) => diary.id === diaryId);
 
@@ -340,8 +459,7 @@ function deleteDiary(diaryId) {
         return;
     }
 
-    const canManageDiary = diaryToDelete.writer === loggedInUser || loggedInUser === DEVELOPER_ACCOUNT.username;
-    if (!canManageDiary) {
+    if (diaryToDelete.writer !== loggedInUser) {
         alert('본인이 작성한 글만 삭제할 수 있습니다.');
         return;
     }
@@ -365,7 +483,27 @@ function deleteDiary(diaryId) {
     renderDiaries();
 }
 
+async function deleteRemoteDiary(diaryId) {
+    const { error } = await diarySupabase
+        .from('diaries')
+        .delete()
+        .eq('id', diaryId)
+        .eq('writer_id', currentAuthUser.id);
+
+    if (error) {
+        alert(`일기를 삭제하지 못했습니다: ${error.message}`);
+        return;
+    }
+
+    renderDiaries();
+}
+
 function editDiary(diaryId) {
+    if (isRemoteMode()) {
+        editRemoteDiary(diaryId);
+        return;
+    }
+
     const diaries = JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
     const diary = diaries.find((item) => item.id === diaryId);
 
@@ -373,8 +511,7 @@ function editDiary(diaryId) {
         return;
     }
 
-    const canManageDiary = diary.writer === loggedInUser || loggedInUser === DEVELOPER_ACCOUNT.username;
-    if (!canManageDiary) {
+    if (diary.writer !== loggedInUser) {
         alert('본인이 작성한 글만 수정할 수 있습니다.');
         return;
     }
@@ -398,10 +535,40 @@ function editDiary(diaryId) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+async function editRemoteDiary(diaryId) {
+    const { data: diary, error } = await diarySupabase
+        .from('diaries')
+        .select('*')
+        .eq('id', diaryId)
+        .eq('writer_id', currentAuthUser.id)
+        .single();
+
+    if (error || !diary) {
+        alert('본인이 작성한 글만 수정할 수 있습니다.');
+        return;
+    }
+
+    editingDiaryId = diary.id;
+    selectedImage = diary.image || '';
+    document.getElementById('writer').value = diary.writer;
+    document.getElementById('title').value = diary.title;
+    document.getElementById('content').value = diary.content;
+    document.getElementById('save-diary-btn').textContent = '수정 완료';
+    const preview = document.getElementById('image-preview');
+    if (diary.image) {
+        preview.innerHTML = `<img src="${diary.image}" alt="기존 이미지 미리보기">`;
+        document.getElementById('remove-image-btn').classList.remove('hidden');
+    } else {
+        preview.innerHTML = '';
+        document.getElementById('remove-image-btn').classList.add('hidden');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function handleDiaryAction(event) {
     const target = event.target;
-    const deleteId = Number(target.dataset.deleteId);
-    const editId = Number(target.dataset.editId);
+    const deleteId = target.dataset.deleteId;
+    const editId = target.dataset.editId;
 
     if (deleteId) {
         deleteDiary(deleteId);
@@ -418,6 +585,20 @@ function getVisibleDiaries() {
     }
 
     return JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
+}
+
+async function loadRemoteDiaries() {
+    const { data, error } = await diarySupabase
+        .from('diaries')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        alert(`일기를 불러오지 못했습니다: ${error.message}`);
+        return;
+    }
+
+    renderDiaries(data || []);
 }
 
 function toggleInquiryPanel() {
@@ -480,7 +661,7 @@ function handleBottomNavClick(event) {
     }
 }
 
-function sendInquiry() {
+async function sendInquiry() {
     if (!loggedInUser) {
         alert('로그인 후 문의를 보낼 수 있습니다.');
         return;
@@ -491,6 +672,26 @@ function sendInquiry() {
 
     if (!title || !content) {
         alert('문의 제목과 내용을 모두 입력해 주세요.');
+        return;
+    }
+
+    if (isRemoteMode()) {
+        const { error } = await diarySupabase.from('inquiries').insert({
+            user_id: currentAuthUser.id,
+            user_name: loggedInUser,
+            title: title,
+            content: content
+        });
+
+        if (error) {
+            alert(`문의를 보내지 못했습니다: ${error.message}`);
+            return;
+        }
+
+        document.getElementById('inquiry-title').value = '';
+        document.getElementById('inquiry-content').value = '';
+        renderInquiries();
+        renderAdminInquiries();
         return;
     }
 
@@ -527,8 +728,22 @@ function deleteInquiry(inquiryId) {
     const confirmed = confirm('이 문의를 삭제할까요?');
     if (!confirmed) return;
 
+    if (isRemoteMode()) {
+        deleteRemoteInquiry(inquiryId);
+        return;
+    }
+
     const inquiries = JSON.parse(localStorage.getItem(INQUIRIES_KEY) || '[]');
     localStorage.setItem(INQUIRIES_KEY, JSON.stringify(inquiries.filter((item) => item.id !== inquiryId)));
+    renderAdminInquiries();
+}
+
+async function deleteRemoteInquiry(inquiryId) {
+    const { error } = await diarySupabase.from('inquiries').delete().eq('id', inquiryId);
+    if (error) {
+        alert(`문의를 삭제하지 못했습니다: ${error.message}`);
+        return;
+    }
     renderAdminInquiries();
 }
 
@@ -578,6 +793,11 @@ function deleteUserAccount(usernameToDelete) {
 }
 
 function renderAdminUsers() {
+    if (isRemoteMode()) {
+        renderRemoteAdminUsers();
+        return;
+    }
+
     const usersList = document.getElementById('admin-user-list');
     const users = getUsers();
     const diaryEntries = JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
@@ -603,9 +823,34 @@ function renderAdminUsers() {
     });
 }
 
-function renderAdminDiaries() {
+async function renderRemoteAdminUsers() {
+    const usersList = document.getElementById('admin-user-list');
+    if (!usersList || loggedInUser !== DEVELOPER_ACCOUNT.username) return;
+
+    const { data: profiles, error } = await diarySupabase
+        .from('profiles')
+        .select('username');
+    if (error) {
+        usersList.innerHTML = '<li>사용자 목록을 불러오지 못했습니다.</li>';
+        return;
+    }
+
+    usersList.innerHTML = '';
+    (profiles || []).forEach((profile) => {
+        const li = document.createElement('li');
+        li.textContent = profile.username;
+        usersList.appendChild(li);
+    });
+}
+
+function renderAdminDiaries(remoteDiaries = null) {
+    if (isRemoteMode() && !remoteDiaries) {
+        loadRemoteAdminDiaries();
+        return;
+    }
+
     const adminDiaryList = document.getElementById('admin-diary-list');
-    const diaries = JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
+    const diaries = remoteDiaries || JSON.parse(localStorage.getItem(DIARIES_KEY) || '[]');
 
     adminDiaryList.innerHTML = '';
 
@@ -623,7 +868,8 @@ function renderAdminDiaries() {
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diary.date}`;
+        const diaryDate = diary.date || new Date(diary.created_at).toLocaleString('ko-KR');
+        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diaryDate}`;
 
         const content = document.createElement('p');
         content.textContent = diary.content;
@@ -643,9 +889,23 @@ function renderAdminDiaries() {
     });
 }
 
+async function loadRemoteAdminDiaries() {
+    const { data, error } = await diarySupabase
+        .from('diaries')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) return;
+    renderAdminDiaries(data || []);
+}
+
 function renderAdminInquiries() {
     const inquiryList = document.getElementById('admin-inquiry-list');
     if (!inquiryList || loggedInUser !== DEVELOPER_ACCOUNT.username) return;
+
+    if (isRemoteMode()) {
+        loadRemoteAdminInquiries();
+        return;
+    }
 
     const inquiries = JSON.parse(localStorage.getItem(INQUIRIES_KEY) || '[]');
     inquiryList.innerHTML = '';
@@ -675,11 +935,49 @@ function renderAdminInquiries() {
     });
 }
 
-function renderDiaries() {
+async function loadRemoteAdminInquiries() {
+    const inquiryList = document.getElementById('admin-inquiry-list');
+    if (!inquiryList || loggedInUser !== DEVELOPER_ACCOUNT.username) return;
+
+    const { data: inquiries, error } = await diarySupabase
+        .from('inquiries')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) {
+        inquiryList.innerHTML = '<p class="no-data">문의 목록을 불러오지 못했습니다.</p>';
+        return;
+    }
+
+    inquiryList.innerHTML = '';
+    if (!inquiries.length) {
+        inquiryList.innerHTML = '<p class="no-data">등록된 문의가 없습니다.</p>';
+        return;
+    }
+
+    inquiries.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'inquiry-item';
+        row.innerHTML = `<strong>${item.title}</strong><div>작성자: ${item.user_name}</div><div>문의 시간: ${new Date(item.created_at).toLocaleString('ko-KR')}</div><p>${item.content}</p>`;
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'danger-btn';
+        deleteButton.textContent = '문의 삭제';
+        deleteButton.addEventListener('click', () => deleteInquiry(item.id));
+        row.appendChild(deleteButton);
+        inquiryList.appendChild(row);
+    });
+}
+
+function renderDiaries(remoteDiaries = null) {
     const listContainer = document.getElementById('diary-list');
     listContainer.innerHTML = '';
 
-    const diaries = getVisibleDiaries();
+    if (isRemoteMode() && !remoteDiaries) {
+        loadRemoteDiaries();
+        return;
+    }
+
+    const diaries = remoteDiaries || getVisibleDiaries();
 
     if (diaries.length === 0) {
         const emptyMessage = '아직 작성된 일기가 없습니다.';
@@ -696,7 +994,8 @@ function renderDiaries() {
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diary.date}`;
+        const diaryDate = diary.date || new Date(diary.created_at).toLocaleString('ko-KR');
+        meta.textContent = `작성자: ${diary.writer} | 작성 시간: ${diaryDate}`;
 
         const content = document.createElement('p');
         content.textContent = diary.content;
@@ -713,7 +1012,7 @@ function renderDiaries() {
 
         card.appendChild(content);
 
-        const canManageDiary = diary.writer === loggedInUser || loggedInUser === DEVELOPER_ACCOUNT.username;
+        const canManageDiary = diary.writer === loggedInUser;
 
         if (canManageDiary) {
             const buttons = document.createElement('div');
@@ -740,17 +1039,58 @@ function renderDiaries() {
     });
 }
 
-window.onload = function () {
+function subscribeToRemoteChanges() {
+    if (!isRemoteMode()) return;
+
+    diarySupabase
+        .channel('diary-live-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'diaries' }, () => {
+            renderDiaries();
+            if (loggedInUser === DEVELOPER_ACCOUNT.username) renderAdminDiaries();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, () => {
+            renderAdminInquiries();
+        })
+        .subscribe();
+}
+
+async function initializeRemoteSession() {
+    if (!isRemoteMode()) return;
+
+    const { data } = await diarySupabase.auth.getSession();
+    if (!data.session) {
+        loggedInUser = '';
+        currentAuthUser = null;
+        return;
+    }
+
+    try {
+        const profile = await loadRemoteProfile(data.session.user);
+        currentAuthUser = data.session.user;
+        loggedInUser = profile.username;
+        rememberLogin = true;
+    } catch (error) {
+        await diarySupabase.auth.signOut();
+        loggedInUser = '';
+        currentAuthUser = null;
+    }
+}
+
+window.onload = async function () {
     ensureDeveloperAccount();
 
-    const savedRememberLogin = localStorage.getItem(REMEMBER_LOGIN_KEY);
-    rememberLogin = savedRememberLogin !== 'false';
-
-    if (rememberLogin) {
-        loggedInUser = localStorage.getItem(LOGIN_KEY) || '';
+    if (isRemoteMode()) {
+        await initializeRemoteSession();
     } else {
-        loggedInUser = '';
-        localStorage.removeItem(LOGIN_KEY);
+        const savedRememberLogin = localStorage.getItem(REMEMBER_LOGIN_KEY);
+        rememberLogin = savedRememberLogin !== 'false';
+
+        if (rememberLogin) {
+            loggedInUser = localStorage.getItem(LOGIN_KEY) || '';
+        } else {
+            loggedInUser = '';
+            localStorage.removeItem(LOGIN_KEY);
+        }
     }
 
     updateLoginUI();
@@ -762,6 +1102,7 @@ window.onload = function () {
     document.getElementById('image').addEventListener('change', handleImageSelect);
     document.getElementById('diary-list').addEventListener('click', handleDiaryAction);
     document.getElementById('bottom-nav').addEventListener('click', handleBottomNavClick);
+    subscribeToRemoteChanges();
     if (!loggedInUser) {
         document.getElementById('writer').value = '';
     }
