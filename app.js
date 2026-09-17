@@ -972,6 +972,11 @@ function renderDiaries(remoteDiaries = null) {
     const listContainer = document.getElementById('diary-list');
     listContainer.innerHTML = '';
 
+    if (!loggedInUser) {
+        listContainer.innerHTML = '<p class="no-data">로그인 후 글을 볼 수 있습니다.</p>';
+        return;
+    }
+
     if (isRemoteMode() && !remoteDiaries) {
         loadRemoteDiaries();
         return;
