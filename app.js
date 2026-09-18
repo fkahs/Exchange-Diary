@@ -28,6 +28,13 @@ function usernameToEmail(username) {
     return `${encodeURIComponent(username.trim()).replace(/%/g, '_')}@exchange-diary.local`;
 }
 
+function getUsernameFromAuthUser(user) {
+    const metadataUsername = user.user_metadata?.username?.trim();
+    if (metadataUsername) return metadataUsername;
+
+    return user.email?.split('@')[0] || '';
+}
+
 async function loadRemoteProfile(user) {
     const { data: profile, error } = await diarySupabase
         .from('profiles')
@@ -37,7 +44,9 @@ async function loadRemoteProfile(user) {
 
     if (error) throw error;
     if (!profile) {
-        const username = user.user_metadata?.username || '';
+        const username = getUsernameFromAuthUser(user);
+        if (!username) throw new Error('Supabase 사용자 이메일에서 아이디를 확인할 수 없습니다.');
+
         const { data: createdProfile, error: createError } = await diarySupabase
             .from('profiles')
             .insert({ id: user.id, username: username, is_admin: false })
