@@ -25,7 +25,10 @@ function isRemoteMode() {
 }
 
 function usernameToEmail(username) {
-    return `${encodeURIComponent(username.trim()).replace(/%/g, '_')}@exchange-diary.local`;
+    const normalizedUsername = username.trim();
+    if (normalizedUsername.includes('@')) return normalizedUsername;
+
+    return `${encodeURIComponent(normalizedUsername).replace(/%/g, '_')}@exchange-diary.local`;
 }
 
 function getUsernameFromAuthUser(user) {
@@ -170,12 +173,21 @@ function updateLoginUI() {
 }
 
 async function login() {
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
     const rememberInput = document.getElementById('remember-login');
 
-    if (!username || !password) {
-        alert('아이디와 비밀번호를 입력해 주세요.');
+    if (!username) {
+        usernameInput.focus();
+        alert('아이디를 입력해 주세요.');
+        return;
+    }
+
+    if (!password) {
+        passwordInput.focus();
+        alert('비밀번호를 입력해 주세요.');
         return;
     }
 
@@ -185,11 +197,13 @@ async function login() {
             password: password
         });
 
-        if (error || !data.user) {
+        if (error || !data.user || !data.session) {
             if (error?.message?.toLowerCase().includes('email not confirmed')) {
                 alert('Supabase Authentication에서 이메일 확인을 완료하거나 Email Confirm을 꺼 주세요.');
             } else if (error?.message?.toLowerCase().includes('invalid login credentials')) {
                 alert('아이디 또는 비밀번호가 올바르지 않습니다. Supabase Authentication의 이메일과 비밀번호를 확인해 주세요.');
+            } else if (data.user && !data.session) {
+                alert('로그인 세션이 만들어지지 않았습니다. Supabase에서 이메일 확인을 완료해 주세요.');
             } else {
                 alert(`Supabase 로그인 실패: ${error?.message || '계정을 확인해 주세요.'}`);
             }
@@ -201,11 +215,14 @@ async function login() {
             currentAuthUser = data.user;
             loggedInUser = profile.username;
         } catch (profileError) {
-            await diarySupabase.auth.signOut();
-            currentAuthUser = null;
-            loggedInUser = '';
-            alert(`프로필을 불러오지 못했습니다: ${profileError.message}`);
-            return;
+            currentAuthUser = data.user;
+            loggedInUser = getUsernameFromAuthUser(data.user);
+            if (!loggedInUser) {
+                await diarySupabase.auth.signOut();
+                currentAuthUser = null;
+                alert(`사용자 아이디를 확인하지 못했습니다: ${profileError.message}`);
+                return;
+            }
         }
     } else {
         const users = getUsers();
@@ -453,6 +470,15 @@ function saveDiary() {
 }
 
 async function saveRemoteDiary(title, content) {
+    const { error: profileError } = await diarySupabase
+        .from('profiles')
+        .insert({ id: currentAuthUser.id, username: loggedInUser, is_admin: false });
+
+    if (profileError && !profileError.message.toLowerCase().includes('duplicate')) {
+        alert(`사용자 프로필을 만들지 못했습니다: ${profileError.message}`);
+        return;
+    }
+
     const diaryData = {
         writer_id: currentAuthUser.id,
         writer: loggedInUser,
@@ -1104,9 +1130,9 @@ async function initializeRemoteSession() {
         loggedInUser = profile.username;
         rememberLogin = true;
     } catch (error) {
-        await diarySupabase.auth.signOut();
-        loggedInUser = '';
-        currentAuthUser = null;
+        currentAuthUser = data.session.user;
+        loggedInUser = getUsernameFromAuthUser(data.session.user);
+        rememberLogin = true;
     }
 }
 

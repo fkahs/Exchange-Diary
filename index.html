@@ -17,9 +17,10 @@
                 <span class="login-badge">우리의 이야기</span>
                 <h2>로그인</h2>
             </div>
-            <input type="text" id="login-username" placeholder="아이디">
+            <form id="login-form" onsubmit="event.preventDefault(); login();">
+            <input type="text" id="login-username" name="username" placeholder="아이디" autocomplete="username">
             <div class="password-field">
-                <input type="password" id="login-password" placeholder="비밀번호">
+                <input type="password" id="login-password" name="password" placeholder="비밀번호" autocomplete="current-password">
                 <button type="button" class="password-toggle" onclick="togglePasswordVisibility('login-password', this)" aria-label="비밀번호 보기">보기</button>
             </div>
             <label class="remember-login">
@@ -27,6 +28,7 @@
                 로그인 유지
             </label>
             <button type="button" onclick="login()">로그인</button>
+            </form>
             <p class="helper-text">개발자만 사용자 계정을 추가할 수 있습니다.</p>
         </section>
 
@@ -110,6 +112,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260917-2"></script>
-    <script src="app.js?v=20260918-6"></script>
+    <script src="app.js?v=20260918-12"></script>
 </body>
 </html>
