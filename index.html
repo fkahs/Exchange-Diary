@@ -18,7 +18,10 @@
                 <h2>로그인</h2>
             </div>
             <input type="text" id="login-username" placeholder="아이디">
-            <input type="password" id="login-password" placeholder="비밀번호">
+            <div class="password-field">
+                <input type="password" id="login-password" placeholder="비밀번호">
+                <button type="button" class="password-toggle" onclick="togglePasswordVisibility('login-password', this)" aria-label="비밀번호 보기">보기</button>
+            </div>
             <label class="remember-login">
                 <input type="checkbox" id="remember-login" checked>
                 로그인 유지
@@ -30,7 +33,10 @@
         <section id="developer-panel" class="panel hidden">
             <h2>개발자 계정 관리</h2>
             <input type="text" id="new-user-id" placeholder="추가할 아이디">
-            <input type="password" id="new-user-password" placeholder="추가할 비밀번호">
+            <div class="password-field">
+                <input type="password" id="new-user-password" placeholder="추가할 비밀번호">
+                <button type="button" class="password-toggle" onclick="togglePasswordVisibility('new-user-password', this)" aria-label="비밀번호 보기">보기</button>
+            </div>
             <button type="button" class="secondary-btn" onclick="addUserAccount()">사용자 추가</button>
             <button type="button" class="secondary-btn" onclick="openAdminPage()">관리자 페이지</button>
             <button type="button" class="danger-btn" onclick="logout()">로그아웃</button>
@@ -104,6 +110,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260917-2"></script>
-    <script src="app.js?v=20260918-1"></script>
+    <script src="app.js?v=20260918-6"></script>
 </body>
 </html>

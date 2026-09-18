@@ -27,6 +27,29 @@ create table if not exists public.inquiries (
     created_at timestamptz not null default now()
 );
 
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    insert into public.profiles (id, username, is_admin)
+    values (
+        new.id,
+        coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)),
+        false
+    )
+    on conflict (id) do nothing;
+    return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+    after insert on auth.users
+    for each row execute procedure public.handle_new_user();
+
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -87,7 +110,12 @@ create policy "inquiries delete admin" on public.inquiries
 
 do $$
 begin
-    begin
+    begin    insert into public.profiles (id, username, is_admin)
+    select id, 'rove143', false
+    from auth.users
+    where email = 'rove143@exchange-diary.local'
+    on conflict (id) do update
+    set is_admin = false;
         alter publication supabase_realtime add table public.diaries;
     exception when duplicate_object then null;
     end;

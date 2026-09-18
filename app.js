@@ -35,6 +35,14 @@ function getUsernameFromAuthUser(user) {
     return user.email?.split('@')[0] || '';
 }
 
+function togglePasswordVisibility(inputId, button) {
+    const input = document.getElementById(inputId);
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    button.textContent = isPassword ? '숨기기' : '보기';
+    button.setAttribute('aria-label', isPassword ? '비밀번호 숨기기' : '비밀번호 보기');
+}
+
 async function loadRemoteProfile(user) {
     const { data: profile, error } = await diarySupabase
         .from('profiles')
@@ -179,9 +187,9 @@ async function login() {
 
         if (error || !data.user) {
             if (error?.message?.toLowerCase().includes('email not confirmed')) {
-                alert('Supabase에서 lamon 계정의 이메일 확인을 완료하거나 Email Confirm을 꺼 주세요.');
+                alert('Supabase Authentication에서 이메일 확인을 완료하거나 Email Confirm을 꺼 주세요.');
             } else if (error?.message?.toLowerCase().includes('invalid login credentials')) {
-                alert('Supabase Authentication에 lamon 계정을 만들고 비밀번호를 fkahs100409@로 설정해 주세요.');
+                alert('아이디 또는 비밀번호가 올바르지 않습니다. Supabase Authentication의 이메일과 비밀번호를 확인해 주세요.');
             } else {
                 alert(`Supabase 로그인 실패: ${error?.message || '계정을 확인해 주세요.'}`);
             }
@@ -193,6 +201,9 @@ async function login() {
             currentAuthUser = data.user;
             loggedInUser = profile.username;
         } catch (profileError) {
+            await diarySupabase.auth.signOut();
+            currentAuthUser = null;
+            loggedInUser = '';
             alert(`프로필을 불러오지 못했습니다: ${profileError.message}`);
             return;
         }
