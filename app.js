@@ -210,20 +210,16 @@ async function login() {
             return;
         }
 
-        try {
-            const profile = await loadRemoteProfile(data.user);
-            currentAuthUser = data.user;
-            loggedInUser = profile.username;
-        } catch (profileError) {
-            currentAuthUser = data.user;
-            loggedInUser = getUsernameFromAuthUser(data.user);
-            if (!loggedInUser) {
-                await diarySupabase.auth.signOut();
-                currentAuthUser = null;
-                alert(`사용자 아이디를 확인하지 못했습니다: ${profileError.message}`);
-                return;
-            }
-        }
+        currentAuthUser = data.user;
+        loggedInUser = getUsernameFromAuthUser(data.user) || username.split('@')[0];
+
+        loadRemoteProfile(data.user)
+            .then((profile) => {
+                if (profile?.username) loggedInUser = profile.username;
+            })
+            .catch((profileError) => {
+                console.warn('프로필 조회를 건너뜁니다. 일기 저장 시 다시 시도합니다.', profileError);
+            });
     } else {
         const users = getUsers();
         if (!users[username] || users[username] !== password) {
